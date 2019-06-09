@@ -3,10 +3,20 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"html/template"
+	"io/ioutil"
+	"log"
+	"net/http"
 	"time"
 )
 
 var Blockchain []Block
+var templates = template.Must(template.ParseFiles("home.html"))
+
+type Page struct {
+	Title string
+	Body  []byte
+}
 
 type Block struct {
 	Index         int
@@ -58,4 +68,42 @@ func replaceChain(newBlocks []Block) {
 	if len(newBlocks) > len(Blockchain) {
 		Blockchain = newBlocks
 	}
+}
+
+func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		fn(w, r, "home")
+	}
+}
+
+func loadPage(title string) (*Page, error) {
+	filename := title + ".html"
+	body, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	return &Page{Title: title, Body: body}, nil
+}
+
+func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
+	err := templates.ExecuteTemplate(w, tmpl+".html", p)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	return
+}
+
+func homeHandler(w http.ResponseWriter, r *http.Request, title string) {
+	p, err := loadPage(title)
+	if err != nil {
+		p = &Page{Title: title}
+	}
+	renderTemplate(w, "home", p)
+}
+
+func main() {
+	http.HandleFunc("/", makeHandler(homeHandler))
+	http.HandleFunc("/home", makeHandler(homeHandler))
+
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
